@@ -326,4 +326,6 @@ st.markdown(
     "\n\n"
     "**Developed by:** Vignesh S  \n"
     "**and Gayathri PhD  \n"
+
     "*Clinical AMR Surveillance & Bioinformatics Dashboard*"
+)
