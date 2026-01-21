@@ -1,12 +1,13 @@
 # ============================================================
 # Clinical AMR Surveillance Dashboard
-# FINAL VERSION — CLEANED DATA INPUT ONLY
+# FINAL v1 — Cleaned Data Only
 # ============================================================
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import io
 
 # ------------------------------------------------------------
 # PAGE CONFIG
@@ -19,11 +20,12 @@ st.set_page_config(
 
 st.title("🧫 Clinical Antimicrobial Resistance (AMR) Surveillance Dashboard")
 st.caption(
-    "For antimicrobial resistance surveillance, research, and stewardship support"
+    "For antimicrobial resistance surveillance, epidemiology, "
+    "research, and antimicrobial stewardship support"
 )
 
 # ------------------------------------------------------------
-# SIDEBAR — INPUT & DOCUMENTATION
+# SIDEBAR — DATA INPUT & DOCUMENTATION
 # ------------------------------------------------------------
 st.sidebar.header("📂 Data Upload")
 
@@ -44,8 +46,7 @@ def load_uploaded(file):
 
 with st.sidebar.expander("📋 Expected Input Format"):
     st.markdown("""
-**File type:** `.xlsx` (Excel)
-
+**File type:** `.xlsx`  
 **Each row = one isolate**
 
 ### Required metadata columns
@@ -54,13 +55,13 @@ with st.sidebar.expander("📋 Expected Input Format"):
 - `GENDER` (M / F)
 - `ESBL` (YES / NO)
 - `MDR` (YES / NO)
-- `MAR_INDEX` (numeric, 0–1)
+- `MAR_INDEX` (0–1)
 
 ### Antibiotic columns
 - One column per antibiotic
-- Allowed values: **S**, **I**, **R**
+- Allowed values: **S, I, R**
 
-👉 Download and use the **sample dataset** as a template.
+👉 Use the **sample dataset** as a template.
 """)
 
 # ------------------------------------------------------------
@@ -77,7 +78,7 @@ else:
     st.stop()
 
 # ------------------------------------------------------------
-# STANDARDIZE COLUMN NAMES
+# STANDARDIZE COLUMNS
 # ------------------------------------------------------------
 df.columns = (
     df.columns.str.strip()
@@ -86,13 +87,7 @@ df.columns = (
               .str.replace("/", "_")
 )
 
-# ------------------------------------------------------------
-# VALIDATION (STRICT)
-# ------------------------------------------------------------
-required_cols = [
-    "SNO", "SAMPLE_TYPE", "GENDER", "ESBL", "MDR", "MAR_INDEX"
-]
-
+required_cols = ["SNO", "SAMPLE_TYPE", "GENDER", "ESBL", "MDR", "MAR_INDEX"]
 missing = [c for c in required_cols if c not in df.columns]
 if missing:
     st.error(f"❌ Missing required columns: {missing}")
@@ -163,7 +158,10 @@ tabs = st.tabs([
     "⚠️ MAR Index & Risk",
     "🔗 Co-Resistance",
     "🧬 MDR Profiles",
-    "⬇️ Download"
+    "🧪 ESBL vs Non-ESBL",
+    "📐 MDR Structure",
+    "📝 AMR Summary",
+    "⬇️ Downloads"
 ])
 
 # ============================================================
@@ -176,9 +174,8 @@ with tabs[0]:
     c3.metric("ESBL (%)", f"{(df['ESBL']=='YES').mean()*100:.1f}%")
 
     st.info(
-        "This overview summarizes the antimicrobial resistance burden in the dataset. "
-        "A high MDR or ESBL prevalence indicates limited treatment options "
-        "and the need for enhanced stewardship."
+        "This overview summarizes the overall antimicrobial resistance burden "
+        "within the dataset."
     )
 
 # ============================================================
@@ -209,11 +206,6 @@ with tabs[1]:
     fig.update_layout(xaxis_tickangle=-45, yaxis_range=[0, 100])
     st.plotly_chart(fig, use_container_width=True)
 
-    st.info(
-        "Antibiotics with high resistance proportions may be unsuitable "
-        "for empirical therapy in this population."
-    )
-
 # ============================================================
 # TAB 3 — MDR & ESBL
 # ============================================================
@@ -227,11 +219,6 @@ with tabs[2]:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    st.info(
-        "MDR prevalence reflects the proportion of isolates resistant "
-        "to multiple antibiotic classes."
-    )
-
 # ============================================================
 # TAB 4 — MAR INDEX
 # ============================================================
@@ -244,11 +231,6 @@ with tabs[3]:
     )
     fig.add_vline(x=0.2, line_dash="dash", line_color="red")
     st.plotly_chart(fig, use_container_width=True)
-
-    st.info(
-        "MAR index values above 0.2 indicate high-risk isolates "
-        "with substantial antibiotic exposure."
-    )
 
 # ============================================================
 # TAB 5 — CO-RESISTANCE
@@ -264,11 +246,6 @@ with tabs[4]:
         title="Antibiotic Co-Resistance Heatmap"
     )
     st.plotly_chart(fig, use_container_width=True)
-
-    st.info(
-        "Strong co-resistance suggests antibiotics that frequently fail together, "
-        "limiting combination therapy options."
-    )
 
 # ============================================================
 # TAB 6 — MDR PROFILES
@@ -291,41 +268,151 @@ with tabs[5]:
 
     st.dataframe(top_profiles, use_container_width=True)
 
-    st.info(
-        "These dominant MDR profiles represent common resistance architectures "
-        "observed among multidrug-resistant isolates."
-    )
-
 # ============================================================
-# TAB 7 — DOWNLOAD
+# TAB 7 — ESBL vs NON-ESBL
 # ============================================================
 with tabs[6]:
+    df_esbl = df_long.copy()
+    df_esbl["IS_RESISTANT"] = (df_esbl["RESISTANCE_SCORE"] == 1.0).astype(int)
+
+    esbl_summary = (
+        df_esbl.groupby(["ANTIBIOTIC", "ESBL"])["IS_RESISTANT"]
+        .mean().reset_index()
+    )
+    esbl_summary["PERCENT_RESISTANT"] = esbl_summary["IS_RESISTANT"] * 100
+
+    fig = px.bar(
+        esbl_summary,
+        x="ANTIBIOTIC",
+        y="PERCENT_RESISTANT",
+        color="ESBL",
+        barmode="group",
+        title="ESBL vs Non-ESBL Resistance Comparison",
+        labels={"PERCENT_RESISTANT": "% Resistant"}
+    )
+    fig.update_layout(xaxis_tickangle=-45, yaxis_range=[0, 100])
+    st.plotly_chart(fig, use_container_width=True)
+
+# ============================================================
+# TAB 8 — MDR STRUCTURE
+# ============================================================
+with tabs[7]:
+    df_mdr_long = df_long[df_long["MDR"] == "YES"].copy()
+    df_mdr_long["IS_RESISTANT"] = (df_mdr_long["RESISTANCE_SCORE"] == 1.0).astype(int)
+
+    mdr_drivers = (
+        df_mdr_long.groupby("ANTIBIOTIC")["IS_RESISTANT"]
+        .mean().reset_index()
+    )
+    mdr_drivers["PERCENT_RESISTANT"] = mdr_drivers["IS_RESISTANT"] * 100
+    mdr_drivers = mdr_drivers.sort_values("PERCENT_RESISTANT", ascending=False)
+
+    fig = px.bar(
+        mdr_drivers,
+        x="ANTIBIOTIC",
+        y="PERCENT_RESISTANT",
+        title="Antibiotics Driving MDR"
+    )
+    fig.update_layout(xaxis_tickangle=-45, yaxis_range=[0, 100])
+    st.plotly_chart(fig, use_container_width=True)
+
+# ============================================================
+# TAB 9 — AUTO SUMMARY (STEP 5D)
+# ============================================================
+with tabs[8]:
+    total = df.shape[0]
+    mdr_pct = (df["MDR"] == "YES").mean() * 100
+    esbl_pct = (df["ESBL"] == "YES").mean() * 100
+    high_mar = (df["MAR_INDEX"] > 0.2).mean() * 100
+    median_mar = df["MAR_INDEX"].median()
+
+    top_abx = (
+        df_long[df_long["RESISTANCE_SCORE"] == 1.0]
+        .groupby("ANTIBIOTIC")
+        .size()
+        .sort_values(ascending=False)
+        .head(3)
+        .index.tolist()
+    )
+
+    summary_text = f"""
+A total of **{total} clinical isolates** were analyzed.
+
+- **MDR prevalence:** {mdr_pct:.1f}%
+- **ESBL prevalence:** {esbl_pct:.1f}%
+- **Median MAR index:** {median_mar:.2f}
+- **High-risk isolates (MAR > 0.2):** {high_mar:.1f}%
+
+The antibiotics with the highest resistance burden were:
+**{', '.join(top_abx)}**.
+"""
+    st.markdown(summary_text)
+
+# ============================================================
+# TAB 10 — DOWNLOADS
+# ============================================================
+with tabs[9]:
+    st.markdown("### 📥 Data Tables")
+
     st.download_button(
-        "Download Cleaned Dataset (Wide)",
+        "Download cleaned dataset (wide)",
         df.to_csv(index=False),
-        "amr_cleaned_wide.csv"
+        "amr_cleaned_wide.csv",
+        "text/csv"
     )
 
     st.download_button(
-        "Download Long-format Dataset",
+        "Download long-format dataset",
         df_long.to_csv(index=False),
-        "amr_long_format.csv"
+        "amr_long_format.csv",
+        "text/csv"
     )
 
-    st.info("Downloaded files can be used for reporting or further analysis.")
+    res_summary = (
+        df_long.groupby(["ANTIBIOTIC", "RESISTANCE_LABEL"])
+        .size().unstack(fill_value=0)
+    )
+    res_summary_pct = (res_summary.div(res_summary.sum(axis=1), axis=0) * 100).round(2)
+
+    st.download_button(
+        "Download antibiotic resistance summary (%)",
+        res_summary_pct.to_csv(),
+        "antibiotic_resistance_summary.csv",
+        "text/csv"
+    )
+
+    st.download_button(
+        "Download MDR profiles",
+        top_profiles.to_csv(index=False),
+        "mdr_profiles.csv",
+        "text/csv"
+    )
+
+    high_risk = df[df["MAR_INDEX"] > 0.2]
+    st.download_button(
+        "Download high-risk isolates (MAR > 0.2)",
+        high_risk.to_csv(index=False),
+        "high_risk_isolates.csv",
+        "text/csv"
+    )
+
+    st.markdown("### 📝 Reports")
+
+    st.download_button(
+        "Download AMR summary (TXT)",
+        summary_text,
+        "amr_summary.txt",
+        "text/plain"
+    )
 
 # ------------------------------------------------------------
-# DISCLAIMER
+# DISCLAIMER & FOOTER
 # ------------------------------------------------------------
 st.markdown(
     "---\n"
     "**Disclaimer:** This dashboard is intended for surveillance, research, "
-    "and antimicrobial stewardship "
-)
-st.markdown(
-    "\n\n"
+    "and antimicrobial stewardship support only. "
+    "It is not intended for diagnostic or treatment decision-making.\n\n"
     "**Developed by:** Vignesh S  \n"
-    "**and Gayathri PhD  \n"
-
-    "*Clinical AMR Surveillance & Bioinformatics Dashboard*"
+    "**With guidance from:** Dr. <Name>, PhD"
 )
