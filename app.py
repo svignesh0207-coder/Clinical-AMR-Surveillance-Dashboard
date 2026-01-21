@@ -414,5 +414,6 @@ st.markdown(
     "and antimicrobial stewardship support only. "
     "It is not intended for diagnostic or treatment decision-making.\n\n"
     "**Developed by:** Vignesh S  \n"
-    "**With guidance from:** Dr. <Name>, PhD"
+    "**Along with:** ,Gayathri  PhD"
 )
+
