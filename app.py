@@ -1,6 +1,6 @@
 # ============================================================
 # Clinical AMR Surveillance Dashboard
-# REFINED VERSION — With chart downloads, theme, spinners & polish
+# FINAL POLISHED VERSION — Professional light gray theme, chart downloads, all features
 # ============================================================
 import streamlit as st
 import pandas as pd
@@ -9,7 +9,7 @@ import plotly.express as px
 import io
 
 # ------------------------------------------------------------
-# PAGE CONFIG + CUSTOM THEME
+# PAGE CONFIG + PROFESSIONAL THEME
 # ------------------------------------------------------------
 st.set_page_config(
     page_title="Clinical AMR Surveillance Dashboard",
@@ -17,19 +17,66 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://github.com/yourusername/amr-dashboard',  # Change to your repo if exists
+        'Get Help': 'https://github.com/yourusername/amr-dashboard',  # Update with your repo
         'Report a bug': "mailto:your.email@example.com",
-        'About': "Clinical AMR Surveillance Dashboard v1.0 — Research & Stewardship Tool"
+        'About': "Clinical AMR Surveillance Dashboard v1.1 — Research & Stewardship Tool"
     }
 )
 
-# Custom theme (professional look: teal/blue accents, light background)
+# Professional light gray theme
 st.markdown("""
     <style>
-    .stApp { background-color: #f8f9fa; }
-    .stButton>button { background-color: #007BFF; color: white; }
-    h1, h2, h3 { color: #2c3e50; }
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stTab"] { font-size: 16px; }
+    .stApp {
+        background-color: #f5f6f5;          /* Clean light gray – professional & calm */
+    }
+    section[data-testid="stSidebar"] {
+        background-color: #e9ecef;          /* Slightly darker gray sidebar for contrast */
+        border-right: 1px solid #dee2e6;
+    }
+    .stButton>button {
+        background-color: #007BFF;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+    .stButton>button:hover {
+        background-color: #0056b3;
+        transition: background-color 0.2s;
+    }
+    h1, h2, h3 {
+        color: #2c3e50;
+        font-family: 'Segoe UI', sans-serif;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #ffffff;
+        border-radius: 8px;
+        padding: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    }
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stTab"] {
+        font-size: 16px;
+        font-weight: 600;
+        padding: 10px 20px;
+        border-radius: 6px;
+    }
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+        background-color: #007BFF;
+        color: white;
+    }
+    .stMetric {
+        background-color: white;
+        border-radius: 8px;
+        padding: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+    hr {
+        border-color: #dee2e6;
+        margin: 2rem 0;
+    }
+    footer {visibility: hidden;}
     </style>
 """, unsafe_allow_html=True)
 
@@ -162,7 +209,7 @@ with st.spinner("Applying filters..."):
     df_long = df_long[df_long["SNO"].isin(df["SNO"])]
 
 # ------------------------------------------------------------
-# TABS (6 tabs — MDR Profiles removed)
+# TABS (7 tabs — all features included)
 # ------------------------------------------------------------
 tabs = st.tabs([
     "📊 Overview",
@@ -170,6 +217,7 @@ tabs = st.tabs([
     "🦠 MDR & ESBL",
     "⚠️ MAR Index & Risk",
     "🔗 Co-Resistance",
+    "🧬 MDR Profiles",
     "⬇️ Download"
 ])
 
@@ -331,9 +379,36 @@ with tabs[4]:
     )
 
 # ============================================================
-# TAB 6 — DOWNLOAD
+# TAB 6 — MDR PROFILES
 # ============================================================
 with tabs[5]:
+    with st.spinner("Generating MDR resistance profiles..."):
+        def profile(row):
+            return ",".join([abx for abx in antibiotic_cols if row[abx] == 1.0])
+
+        df_profiles = df_encoded.copy()
+        df_profiles["PROFILE"] = df_profiles.apply(profile, axis=1)
+
+        top_profiles = (
+            df_profiles[df["MDR"] == "YES"]
+            .groupby("PROFILE")
+            .size()
+            .reset_index(name="COUNT")
+            .sort_values("COUNT", ascending=False)
+            .head(10)
+        )
+
+        st.dataframe(top_profiles, use_container_width=True)
+
+    st.info(
+        "These dominant MDR profiles represent common resistance architectures "
+        "observed among multidrug-resistant isolates."
+    )
+
+# ============================================================
+# TAB 7 — DOWNLOAD
+# ============================================================
+with tabs[6]:
     st.subheader("Export Data")
     st.download_button(
         "Download Cleaned Dataset (Wide format)",
@@ -355,11 +430,10 @@ with tabs[5]:
 st.markdown("---")
 st.markdown(
     """
-    <div style='text-align: center; color: #6c757d; font-size: 0.9em;'>
-    Clinical AMR Surveillance Dashboard v1.0 | Built for research & stewardship | 
-    Results should be interpreted by qualified professionals.<br>
+    <div style='text-align: center; color: #6c757d; font-size: 0.9em; padding: 2rem 0;'>
+    Clinical AMR Surveillance Dashboard v1.1 | Built for research & antimicrobial stewardship<br>
     <strong>Disclaimer:</strong> This tool is for surveillance, research, and educational use only. 
-    Not for clinical decision-making without expert review.
+    Results should be interpreted by qualified professionals. Not for direct clinical decision-making.
     </div>
     """,
     unsafe_allow_html=True
